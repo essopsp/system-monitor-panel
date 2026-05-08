@@ -1,0 +1,10 @@
+{
+    "uuid": "system-monitor-panel@shlimbo",
+    "name": "System Monitor Panel",
+    "description": "Displays CPU, RAM, disk usage and network speed in the top panel",
+    "url": "https://github.com/shlimbo/system-monitor-panel",
+    "shell-version": ["40", "41", "42", "43", "44", "45", "46", "47", "48", "49"],
+    "gettext-domain": "system-monitor-panel",
+    "settings-schema": "org.gnome.shell.extensions.system-monitor-panel",
+    "session-modes": ["user"]
+}

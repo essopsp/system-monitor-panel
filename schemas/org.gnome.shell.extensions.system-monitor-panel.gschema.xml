@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+    <schema id="org.gnome.shell.extensions.system-monitor-panel" path="/org/gnome/shell/extensions/system-monitor-panel/">
+        <key name="show-cpu" type="b">
+            <default>true</default>
+            <summary>Show CPU usage</summary>
+            <description>Display CPU usage percentage in the panel</description>
+        </key>
+        <key name="show-ram" type="b">
+            <default>true</default>
+            <summary>Show RAM usage</summary>
+            <description>Display RAM usage in the panel</description>
+        </key>
+        <key name="show-disk" type="b">
+            <default>true</default>
+            <summary>Show disk usage</summary>
+            <description>Display disk usage in the panel</description>
+        </key>
+        <key name="show-network" type="b">
+            <default>true</default>
+            <summary>Show network speed</summary>
+            <description>Display network download/upload speed in the panel</description>
+        </key>
+        <key name="update-interval" type="i">
+            <default>2</default>
+            <range min="1" max="60"/>
+            <summary>Update interval</summary>
+            <description>How often to update metrics (in seconds)</description>
+        </key>
+        <key name="show-icons" type="b">
+            <default>true</default>
+            <summary>Show icons</summary>
+            <description>Show icons next to metrics in the panel</description>
+        </key>
+        <key name="short-format" type="b">
+            <default>true</default>
+            <summary>Short format</summary>
+            <description>Use short format (single line) in the panel</description>
+        </key>
+    </schema>
+</schemalist>
