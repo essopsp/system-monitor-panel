@@ -79,8 +79,12 @@ class SystemMetrics {
         this._disk = new GTop.glibtop_fsusage();
         this._prevNetwork = { rx: 0, tx: 0, time: 0 };
 
-        GTop.glibtop_get_cpu(this._lastCpu);
-        this.refresh();
+        GTop.glibtop_get_cpu(this._cpu);
+        this._lastCpu.total = this._cpu.total;
+        this._lastCpu.idle = this._cpu.idle;
+
+        GTop.glibtop_get_mem(this._mem);
+        GTop.glibtop_get_fsusage(this._disk, '/');
     }
 
     getCpu() {
@@ -245,12 +249,23 @@ class SystemMonitorPanel extends PanelMenu.Button {
     _update() {
         if (!this._metrics) return;
 
-        this._metrics.refresh();
+        try {
+            this._metrics.refresh();
+        } catch (e) {
+            log(`System Monitor Panel: refresh failed: ${e}`);
+            return;
+        }
 
-        const cpu = this._metrics.getCpu();
-        const mem = this._metrics.getMemory();
-        const disk = this._metrics.getDisk();
-        const net = this._metrics.getNetwork();
+        let cpu, mem, disk, net;
+        try {
+            cpu = this._metrics.getCpu();
+            mem = this._metrics.getMemory();
+            disk = this._metrics.getDisk();
+            net = this._metrics.getNetwork();
+        } catch (e) {
+            log(`System Monitor Panel: metrics read failed: ${e}`);
+            return;
+        }
 
         const showCpu = this._settings ? this._settings.get_boolean('show-cpu') : true;
         const showRam = this._settings ? this._settings.get_boolean('show-ram') : true;
