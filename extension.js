@@ -111,6 +111,17 @@ class SystemMetrics {
         };
     }
 
+    getSwap() {
+        const total = this._mem.total_swap;
+        if (total === 0) return { percent: 0, used: 0, total: 0 };
+        const used = this._mem.used_swap;
+        return {
+            percent: (used / total) * 100,
+            used: used,
+            total: total
+        };
+    }
+
     getDisk() {
         try {
             const total = this._disk.blocks * this._disk.blocksize;
@@ -215,6 +226,9 @@ class SystemMonitorPanel extends PanelMenu.Button {
         this._diskItem = new PopupMenu.PopupMenuItem('Disk: --');
         this.menu.addMenuItem(this._diskItem);
 
+        this._swapItem = new PopupMenu.PopupMenuItem('Swap: --');
+        this.menu.addMenuItem(this._swapItem);
+
         this._netItem = new PopupMenu.PopupMenuItem('Network: --');
         this.menu.addMenuItem(this._netItem);
 
@@ -260,10 +274,11 @@ class SystemMonitorPanel extends PanelMenu.Button {
             return;
         }
 
-        let cpu, mem, disk, net;
+        let cpu, mem, swap, disk, net;
         try {
             cpu = this._metrics.getCpu();
             mem = this._metrics.getMemory();
+            swap = this._metrics.getSwap();
             disk = this._metrics.getDisk();
             net = this._metrics.getNetwork();
         } catch (e) {
@@ -273,6 +288,7 @@ class SystemMonitorPanel extends PanelMenu.Button {
 
         const showCpu = this._settings ? this._settings.get_boolean('show-cpu') : true;
         const showRam = this._settings ? this._settings.get_boolean('show-ram') : true;
+        const showSwap = this._settings ? this._settings.get_boolean('show-swap') : true;
         const showDisk = this._settings ? this._settings.get_boolean('show-disk') : true;
         const showNet = this._settings ? this._settings.get_boolean('show-network') : true;
         const shortFormat = this._settings ? this._settings.get_boolean('short-format') : true;
@@ -283,6 +299,7 @@ class SystemMonitorPanel extends PanelMenu.Button {
         const parts = [];
         if (showCpu) parts.push(`CPU:${Math.round(cpu)}%`);
         if (showRam) parts.push(`RAM:${Math.round(mem.percent)}%`);
+        if (showSwap && swap.total > 0) parts.push(`Sw:${Math.round(swap.percent)}%`);
         if (showDisk) parts.push(`Dk:${Math.round(disk.percent)}%`);
         if (showNet) parts.push(`↓${formatSpeed(net.rx)}`);
 
@@ -293,6 +310,9 @@ class SystemMonitorPanel extends PanelMenu.Button {
         }
         if (showRam) {
             this._ramItem.label = `RAM: ${Math.round(mem.percent)}% (${formatBytes(mem.used)} / ${formatBytes(mem.total)})`;
+        }
+        if (showSwap) {
+            this._swapItem.label = `Swap: ${Math.round(swap.percent)}% (${formatBytes(swap.used)} / ${formatBytes(swap.total)})`;
         }
         if (showDisk) {
             this._diskItem.label = `Disk: ${Math.round(disk.percent)}% (${formatBytes(disk.used)} / ${formatBytes(disk.total)})`;

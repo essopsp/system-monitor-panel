@@ -54,6 +54,14 @@ export default class SystemMonitorPreferences extends ExtensionPreferences {
         settings.bind('show-network', netSwitch, 'active', 0);
         displayGroup.add(netSwitch);
 
+        const swapSwitch = new Adw.SwitchRow({
+            title: 'Swap Usage',
+            subtitle: 'Show swap usage in the panel',
+            active: settings.get_boolean('show-swap'),
+        });
+        settings.bind('show-swap', swapSwitch, 'active', 0);
+        displayGroup.add(swapSwitch);
+
         const appearanceGroup = new Adw.PreferencesGroup({
             title: 'Appearance',
             description: 'Configure how metrics are displayed',

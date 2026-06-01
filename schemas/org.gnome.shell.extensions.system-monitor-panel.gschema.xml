@@ -21,6 +21,11 @@
             <summary>Show network speed</summary>
             <description>Display network download/upload speed in the panel</description>
         </key>
+        <key name="show-swap" type="b">
+            <default>true</default>
+            <summary>Show swap usage</summary>
+            <description>Display swap usage in the panel</description>
+        </key>
         <key name="update-interval" type="i">
             <default>2</default>
             <range min="1" max="60"/>
