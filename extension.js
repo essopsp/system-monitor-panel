@@ -96,14 +96,42 @@ class SystemMetrics {
         return Math.min(100, Math.max(0, ((deltaTotal - deltaIdle) / deltaTotal) * 100));
     }
 
+    _parseMemInfo(fields) {
+        try {
+            const file = Gio.File.new_for_path('/proc/meminfo');
+            const [ok, contents] = file.load_contents(null);
+            if (!ok) return null;
+
+            const text = new TextDecoder().decode(contents);
+            const result = {};
+            for (const line of text.split('\n')) {
+                for (const key of fields) {
+                    if (line.startsWith(key + ':')) {
+                        result[key] = parseInt(line.split(/\s+/)[1], 10) * 1024;
+                    }
+                }
+            }
+            return result;
+        } catch (e) {
+            return null;
+        }
+    }
+
     getMemory() {
         const total = this._mem.total;
         if (total === 0) return { percent: 0, used: 0, total: 0 };
 
-        const used = this._mem.available > 0
-            ? total - this._mem.available
-            : this._mem.used;
+        const info = this._parseMemInfo(['MemAvailable']);
+        if (info && info.MemAvailable > 0) {
+            const used = total - info.MemAvailable;
+            return {
+                percent: (used / total) * 100,
+                used: used,
+                total: total
+            };
+        }
 
+        const used = this._mem.user > 0 ? this._mem.user : this._mem.used;
         return {
             percent: (used / total) * 100,
             used: used,
@@ -113,14 +141,17 @@ class SystemMetrics {
 
     getSwap() {
         try {
-            const total = this._mem.total_swap;
-            if (total === 0) return { percent: 0, used: 0, total: 0 };
-            const used = this._mem.used_swap;
-            return {
-                percent: (used / total) * 100,
-                used: used,
-                total: total
-            };
+            const info = this._parseMemInfo(['SwapTotal', 'SwapFree']);
+            if (info && info.SwapTotal > 0) {
+                const total = info.SwapTotal;
+                const used = total - info.SwapFree;
+                return {
+                    percent: (used / total) * 100,
+                    used: used,
+                    total: total
+                };
+            }
+            return { percent: 0, used: 0, total: 0 };
         } catch (e) {
             return { percent: 0, used: 0, total: 0 };
         }
