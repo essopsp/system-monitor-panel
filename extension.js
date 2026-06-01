@@ -279,24 +279,27 @@ class SystemMonitorPanel extends PanelMenu.Button {
         }
 
         let cpu, mem, swap, disk, net;
+        let showCpu = true, showRam = true, showSwap = true;
+        let showDisk = true, showNet = true, showIcons = true;
         try {
             cpu = this._metrics.getCpu();
             mem = this._metrics.getMemory();
             swap = this._metrics.getSwap();
             disk = this._metrics.getDisk();
             net = this._metrics.getNetwork();
+
+            if (this._settings) {
+                showCpu = this._settings.get_boolean('show-cpu');
+                showRam = this._settings.get_boolean('show-ram');
+                showSwap = this._settings.get_boolean('show-swap');
+                showDisk = this._settings.get_boolean('show-disk');
+                showNet = this._settings.get_boolean('show-network');
+                showIcons = this._settings.get_boolean('show-icons');
+            }
         } catch (e) {
             log(`System Monitor Panel: metrics read failed: ${e}`);
             return;
         }
-
-        const showCpu = this._settings ? this._settings.get_boolean('show-cpu') : true;
-        const showRam = this._settings ? this._settings.get_boolean('show-ram') : true;
-        const showSwap = this._settings ? this._settings.get_boolean('show-swap') : true;
-        const showDisk = this._settings ? this._settings.get_boolean('show-disk') : true;
-        const showNet = this._settings ? this._settings.get_boolean('show-network') : true;
-        const shortFormat = this._settings ? this._settings.get_boolean('short-format') : true;
-        const showIcons = this._settings ? this._settings.get_boolean('show-icons') : true;
 
         this._mainIcon.visible = showIcons;
 
