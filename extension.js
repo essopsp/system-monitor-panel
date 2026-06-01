@@ -112,14 +112,18 @@ class SystemMetrics {
     }
 
     getSwap() {
-        const total = this._mem.total_swap;
-        if (total === 0) return { percent: 0, used: 0, total: 0 };
-        const used = this._mem.used_swap;
-        return {
-            percent: (used / total) * 100,
-            used: used,
-            total: total
-        };
+        try {
+            const total = this._mem.total_swap;
+            if (total === 0) return { percent: 0, used: 0, total: 0 };
+            const used = this._mem.used_swap;
+            return {
+                percent: (used / total) * 100,
+                used: used,
+                total: total
+            };
+        } catch (e) {
+            return { percent: 0, used: 0, total: 0 };
+        }
     }
 
     getDisk() {
