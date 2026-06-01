@@ -242,6 +242,10 @@ class SystemMonitorPanel extends PanelMenu.Button {
 
         this.add_child(container);
         this._buildMenu();
+
+        this.menu.connect('open-state-changed', (menu, open) => {
+            if (open) this._update();
+        });
     }
 
     _buildMenu() {
@@ -253,18 +257,23 @@ class SystemMonitorPanel extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         this._cpuItem = new PopupMenu.PopupMenuItem('CPU: --');
+        this._cpuLabel = this._cpuItem.label_actor;
         this.menu.addMenuItem(this._cpuItem);
 
         this._ramItem = new PopupMenu.PopupMenuItem('RAM: --');
+        this._ramLabel = this._ramItem.label_actor;
         this.menu.addMenuItem(this._ramItem);
 
         this._diskItem = new PopupMenu.PopupMenuItem('Disk: --');
+        this._diskLabel = this._diskItem.label_actor;
         this.menu.addMenuItem(this._diskItem);
 
         this._swapItem = new PopupMenu.PopupMenuItem('Swap: --');
+        this._swapLabel = this._swapItem.label_actor;
         this.menu.addMenuItem(this._swapItem);
 
         this._netItem = new PopupMenu.PopupMenuItem('Network: --');
+        this._netLabel = this._netItem.label_actor;
         this.menu.addMenuItem(this._netItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -343,20 +352,14 @@ class SystemMonitorPanel extends PanelMenu.Button {
 
         this._statusLabel.text = parts.join(' ') || '--';
 
-        if (showCpu) {
-            this._cpuItem.label = `CPU: ${Math.round(cpu)}%`;
-        }
-        if (showRam) {
-            this._ramItem.label = `RAM: ${Math.round(mem.percent)}% (${formatBytes(mem.used)} / ${formatBytes(mem.total)})`;
-        }
-        if (showSwap) {
-            this._swapItem.label = `Swap: ${Math.round(swap.percent)}% (${formatBytes(swap.used)} / ${formatBytes(swap.total)})`;
-        }
-        if (showDisk) {
-            this._diskItem.label = `Disk: ${Math.round(disk.percent)}% (${formatBytes(disk.used)} / ${formatBytes(disk.total)})`;
-        }
-        if (showNet) {
-            this._netItem.label = `↓ ${formatSpeed(net.rx)}  ↑ ${formatSpeed(net.tx)}`;
+        try {
+            if (showCpu) this._cpuLabel.set_text(`CPU: ${Math.round(cpu)}%`);
+            if (showRam) this._ramLabel.set_text(`RAM: ${Math.round(mem.percent)}% (${formatBytes(mem.used)} / ${formatBytes(mem.total)})`);
+            if (showSwap) this._swapLabel.set_text(`Swap: ${Math.round(swap.percent)}% (${formatBytes(swap.used)} / ${formatBytes(swap.total)})`);
+            if (showDisk) this._diskLabel.set_text(`Disk: ${Math.round(disk.percent)}% (${formatBytes(disk.used)} / ${formatBytes(disk.total)})`);
+            if (showNet) this._netLabel.set_text(`↓ ${formatSpeed(net.rx)}  ↑ ${formatSpeed(net.tx)}`);
+        } catch (e) {
+            log(`System Monitor Panel: menu label update failed: ${e}`);
         }
     }
 });
