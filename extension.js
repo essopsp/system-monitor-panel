@@ -98,8 +98,12 @@ class SystemMetrics {
 
     getMemory() {
         const total = this._mem.total;
-        const used = this._mem.used;
         if (total === 0) return { percent: 0, used: 0, total: 0 };
+
+        const used = this._mem.available > 0
+            ? total - this._mem.available
+            : this._mem.used;
+
         return {
             percent: (used / total) * 100,
             used: used,
