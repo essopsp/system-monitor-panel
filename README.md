@@ -11,43 +11,52 @@ A lightweight GNOME Shell extension that displays real-time system metrics (CPU,
 
 ## Installation
 
-### From GNOME Extensions Website
-
-1. Visit the [extension page](https://extensions.gnome.org/extension/XXXXX/system-monitor-panel/)
-2. Toggle the switch to enable the extension
-3. Click "Install" when prompted
-
 ### Manual Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/shlimbo/system-monitor-panel.git
+git clone https://github.com/essopsp/system-monitor-panel.git
 cd system-monitor-panel
+make install
+```
 
-# Install schema (requires root)
-sudo glib-compile-schemas schemas/
+Then restart GNOME Shell:
 
-# Copy extension to GNOME extensions directory
+- **X11**: press <kbd>Alt</kbd>+<kbd>F2</kbd>, type `r`, hit <kbd>Enter</kbd>
+- **Wayland**: log out and back in — there is no way around this
+
+Verify with `make check`; you want `State: ACTIVE`.
+
+Or manually, without the Makefile:
+
+```bash
+glib-compile-schemas schemas/
 mkdir -p ~/.local/share/gnome-shell/extensions/system-monitor-panel@shlimbo
-cp -r * ~/.local/share/gnome-shell/extensions/system-monitor-panel@shlimbo/
-
-# Restart GNOME Shell (Alt+F2, type "r", Enter)
-# Or log out and back in
+cp -r extension.js prefs.js metadata.json stylesheet.css icons schemas \
+  ~/.local/share/gnome-shell/extensions/system-monitor-panel@shlimbo/
 ```
 
 ### Requirements
 
-- GNOME Shell 40+
-- libgtop2 (system library)
-- GLib, GObject, GTK4, Adwaita (bundled with GNOME)
+- GNOME Shell 40 – 50 (see `shell-version` in `metadata.json`)
+- GLib, Gio, GObject, St, Clutter (bundled with GNOME Shell)
 
-**Install libgtop on your distribution:**
+There are **no external library dependencies.** Metrics are read straight from
+the kernel and GLib:
 
-| Distribution | Command |
-|--------------|---------|
-| Ubuntu/Debian | `sudo apt install libgtop2-dev` |
-| Fedora | `sudo dnf install libgtop2` |
-| Arch Linux | `sudo pacman -S libgtop` |
+| Metric | Source |
+|--------|--------|
+| CPU | `/proc/stat`, using the delta of jiffy counters between samples |
+| RAM | `/proc/meminfo` (`MemTotal`, `MemAvailable`) |
+| Swap | `/proc/meminfo` (`SwapTotal`, `SwapFree`) |
+| Disk | `Gio.File.query_filesystem_info()` on `/` |
+| Network | `/proc/net/dev`, delta between samples, skipping loopback and container interfaces |
+
+Earlier versions depended on libgtop via `gi://GTop`. That was dropped in
+commit *"drop GTop dependency"* because the `gir1.2-gtop-2.0` typelib is not a
+hard dependency of any package and gets autoremoved during Ubuntu release
+upgrades, which silently broke the extension on GNOME 50. It also fixed a live
+bug: the code read `fsusage.blocksize`, but the GIR field is `block_size`, so
+the disk metric rendered as `Dk:NaN%`.
 
 ## Configuration
 
@@ -71,13 +80,13 @@ Right-click on the monitor panel and select **Settings** or use `gnome-extension
 | Update Interval | Seconds between metric updates | 2 seconds |
 
 ## Architecture
-
 ```
 system-monitor-panel@shlimbo/
 ├── extension.js      # Main extension code (GNOME Shell integration)
 ├── prefs.js          # Preferences window (GTK4/Adwaita)
 ├── stylesheet.css    # Panel styling
 ├── metadata.json     # Extension metadata
+├── Makefile          # install / pack / check targets
 ├── schemas/         # GSettings schema
 │   └── org.gnome.shell.extensions.system-monitor-panel.gschema.xml
 └── icons/            # Extension icons
@@ -85,31 +94,36 @@ system-monitor-panel@shlimbo/
 
 ### Key Components
 
-- **SystemMetrics class** (extension.js:74-153) - Collects system data using GTop
-- **SystemMonitorPanel class** (extension.js:155-285) - UI component for panel
-- **SystemMonitorExtension class** (extension.js:287-320) - Extension lifecycle management
+- **`SystemMetrics` class** (extension.js) - Reads `/proc` and GLib filesystem info on demand; holds only the previous CPU and network samples needed to compute rates
+- **`SystemMonitorPanel` class** (extension.js) - `PanelMenu.Button` subclass holding the panel label and the dropdown menu items
+- **`SystemMonitorExtension` class** (extension.js) - Extension lifecycle; installs the indicator and owns the update timeout
 
 ## Development
 
-### Build Schema
-
 ```bash
-glib-compile-schemas schemas/
+make install   # compile schemas + deploy to ~/.local/share/gnome-shell/extensions/
+make check     # show the installed extension's state
+make pack      # build build/<uuid>.shell-extension.zip
+make clean     # remove build output
 ```
+
+`make install` copies only the files that ship, so a stale file left over from
+a previous install cannot leak into the extension directory.
 
 ### Debug Mode
 
 View extension logs:
 
 ```bash
-journalctl -f -o cat | grep "system-monitor-panel"
+journalctl -f -o cat | grep system-monitor-panel
 ```
 
 ### Enable Debugging
 
 Add to `extension.js`:
+
 ```javascript
-global.log('System Monitor: debug message');
+log('System Monitor: debug message');
 ```
 
 ## License

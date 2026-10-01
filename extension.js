@@ -5,7 +5,6 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
-import GTop from 'gi://GTop';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -27,45 +26,75 @@ function formatSpeed(bytesPerSec) {
     return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(2)} GB/s`;
 }
 
+const PROC_PATH = '/proc';
+const ROOT_PATH = '/';
+
+function _readProcFile(name) {
+    try {
+        const file = Gio.File.new_for_path(`${PROC_PATH}/${name}`);
+        const [ok, contents] = file.load_contents(null);
+        if (!ok) return null;
+        return new TextDecoder().decode(contents);
+    } catch (e) {
+        return null;
+    }
+}
+
+function _readMemInfo(fields) {
+    const text = _readProcFile('meminfo');
+    if (!text) return null;
+
+    const result = {};
+    for (const line of text.split('\n')) {
+        for (const key of fields) {
+            if (line.startsWith(`${key}:`)) {
+                const kb = parseInt(line.split(/\s+/)[1], 10);
+                if (!Number.isNaN(kb))
+                    result[key] = kb * 1024;
+            }
+        }
+    }
+    return result;
+}
+
+function _percent(used, total) {
+    if (!total || total <= 0) return 0;
+    return Math.min(100, Math.max(0, (used / total) * 100));
+}
+
 function parseNetDev() {
     let totalRx = 0;
     let totalTx = 0;
 
-    try {
-        const file = Gio.File.new_for_path('/proc/net/dev');
-        const [ok, contents] = file.load_contents(null);
-        if (!ok) return { rx: 0, tx: 0 };
+    const text = _readProcFile('net/dev');
+    if (!text) return { rx: 0, tx: 0 };
 
-        const text = new TextDecoder().decode(contents);
-        const lines = text.split('\n');
+    const lines = text.split('\n');
 
-        for (let i = 2; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
+    for (let i = 2; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
 
-            const colonIndex = line.indexOf(':');
-            if (colonIndex === -1) continue;
+        const colonIndex = line.indexOf(':');
+        if (colonIndex === -1) continue;
 
-            const iface = line.substring(0, colonIndex).trim();
+        const iface = line.substring(0, colonIndex).trim();
 
-            if (iface === 'lo' ||
-                iface.startsWith('docker') ||
-                iface.startsWith('veth') ||
-                iface.startsWith('br-') ||
-                iface.startsWith('virbr') ||
-                iface.startsWith('flannel') ||
-                iface.startsWith('cni')) {
-                continue;
-            }
-
-            const fields = line.substring(colonIndex + 1).trim().split(/\s+/);
-            if (fields.length >= 9) {
-                totalRx += parseInt(fields[0], 10) || 0;
-                totalTx += parseInt(fields[8], 10) || 0;
-            }
+        if (iface === 'lo' ||
+            iface.startsWith('docker') ||
+            iface.startsWith('veth') ||
+            iface.startsWith('br-') ||
+            iface.startsWith('virbr') ||
+            iface.startsWith('flannel') ||
+            iface.startsWith('cni')) {
+            continue;
         }
-    } catch (e) {
-        return { rx: 0, tx: 0 };
+
+        const fields = line.substring(colonIndex + 1).trim().split(/\s+/);
+        if (fields.length >= 9) {
+            totalRx += parseInt(fields[0], 10) || 0;
+            totalTx += parseInt(fields[8], 10) || 0;
+        }
     }
 
     return { rx: totalRx, tx: totalTx };
@@ -73,100 +102,91 @@ function parseNetDev() {
 
 class SystemMetrics {
     constructor() {
-        this._cpu = new GTop.glibtop_cpu();
-        this._lastCpu = new GTop.glibtop_cpu();
-        this._mem = new GTop.glibtop_mem();
-        this._disk = new GTop.glibtop_fsusage();
+        this._prevCpu = this._readCpu();
         this._prevNetwork = { rx: 0, tx: 0, time: 0 };
+    }
 
-        GTop.glibtop_get_cpu(this._cpu);
-        this._lastCpu.total = this._cpu.total;
-        this._lastCpu.idle = this._cpu.idle;
+    _readCpu() {
+        const text = _readProcFile('stat');
+        if (!text) return null;
 
-        GTop.glibtop_get_mem(this._mem);
-        GTop.glibtop_get_fsusage(this._disk, '/');
+        const line = text.split('\n')[0];
+        if (!line || !line.startsWith('cpu ')) return null;
+
+        const fields = line.trim().split(/\s+/).slice(1).map(v => parseInt(v, 10));
+        if (fields.length < 5 || fields.some(Number.isNaN)) return null;
+
+        // Sum every jiffy counter except idle and iowait, which both mean
+        // "not doing work" for our purposes.
+        let total = 0;
+        for (let i = 0; i < fields.length; i++) {
+            if (i !== 3 && i !== 4)
+                total += fields[i];
+        }
+
+        return {total, idle: fields[3] + fields[4]};
     }
 
     getCpu() {
-        const deltaTotal = this._cpu.total - this._lastCpu.total;
-        const deltaIdle = this._cpu.idle - this._lastCpu.idle;
+        const current = this._readCpu();
+        if (!current) return 0;
+
+        const previous = this._prevCpu;
+        this._prevCpu = current;
+
+        if (!previous) return 0;
+
+        const deltaTotal = current.total - previous.total;
+        const deltaIdle = current.idle - previous.idle;
 
         if (deltaTotal <= 0) return 0;
 
-        return Math.min(100, Math.max(0, ((deltaTotal - deltaIdle) / deltaTotal) * 100));
-    }
-
-    _parseMemInfo(fields) {
-        try {
-            const file = Gio.File.new_for_path('/proc/meminfo');
-            const [ok, contents] = file.load_contents(null);
-            if (!ok) return null;
-
-            const text = new TextDecoder().decode(contents);
-            const result = {};
-            for (const line of text.split('\n')) {
-                for (const key of fields) {
-                    if (line.startsWith(key + ':')) {
-                        result[key] = parseInt(line.split(/\s+/)[1], 10) * 1024;
-                    }
-                }
-            }
-            return result;
-        } catch (e) {
-            return null;
-        }
+        return _percent(deltaTotal - deltaIdle, deltaTotal);
     }
 
     getMemory() {
-        const total = this._mem.total;
-        if (total === 0) return { percent: 0, used: 0, total: 0 };
+        const info = _readMemInfo(['MemTotal', 'MemAvailable']);
+        if (!info || !info.MemTotal) return { percent: 0, used: 0, total: 0 };
 
-        const info = this._parseMemInfo(['MemAvailable']);
-        if (info && info.MemAvailable > 0) {
-            const used = total - info.MemAvailable;
-            return {
-                percent: (used / total) * 100,
-                used: used,
-                total: total
-            };
-        }
+        const total = info.MemTotal;
+        const available = info.MemAvailable ?? 0;
+        const used = total - available;
 
-        const used = this._mem.user > 0 ? this._mem.user : this._mem.used;
         return {
-            percent: (used / total) * 100,
+            percent: _percent(used, total),
             used: used,
-            total: total
+            total: total,
         };
     }
 
     getSwap() {
-        try {
-            const info = this._parseMemInfo(['SwapTotal', 'SwapFree']);
-            if (info && info.SwapTotal > 0) {
-                const total = info.SwapTotal;
-                const used = total - info.SwapFree;
-                return {
-                    percent: (used / total) * 100,
-                    used: used,
-                    total: total
-                };
-            }
-            return { percent: 0, used: 0, total: 0 };
-        } catch (e) {
-            return { percent: 0, used: 0, total: 0 };
-        }
+        const info = _readMemInfo(['SwapTotal', 'SwapFree']);
+        if (!info || !info.SwapTotal) return { percent: 0, used: 0, total: 0 };
+
+        const total = info.SwapTotal;
+        const used = total - (info.SwapFree ?? 0);
+
+        return {
+            percent: _percent(used, total),
+            used: used,
+            total: total,
+        };
     }
 
     getDisk() {
         try {
-            const total = this._disk.blocks * this._disk.blocksize;
-            const free = this._disk.bavail * this._disk.blocksize;
+            const info = Gio.File.new_for_path(ROOT_PATH)
+                .query_filesystem_info('filesystem::size,filesystem::free', null);
+            const total = info.get_attribute_uint64('filesystem::size');
+            const free = info.get_attribute_uint64('filesystem::free');
+
+            if (!total) return { percent: 0, used: 0, total: 0 };
+
             const used = total - free;
-            if (total === 0) return { percent: 0, used: 0, total: 0 };
             return {
-                percent: (used / total) * 100,
+                percent: _percent(used, total),
                 used: used,
-                total: total
+                total: total,
             };
         } catch (e) {
             return { percent: 0, used: 0, total: 0 };
@@ -194,15 +214,6 @@ class SystemMetrics {
             rx: Math.max(0, rxSpeed),
             tx: Math.max(0, txSpeed)
         };
-    }
-
-    refresh() {
-        this._lastCpu.total = this._cpu.total;
-        this._lastCpu.idle = this._cpu.idle;
-
-        GTop.glibtop_get_cpu(this._cpu);
-        GTop.glibtop_get_mem(this._mem);
-        GTop.glibtop_get_fsusage(this._disk, '/');
     }
 }
 
@@ -310,13 +321,6 @@ class SystemMonitorPanel extends PanelMenu.Button {
 
     _update() {
         if (!this._metrics) return;
-
-        try {
-            this._metrics.refresh();
-        } catch (e) {
-            log(`System Monitor Panel: refresh failed: ${e}`);
-            return;
-        }
 
         let cpu, mem, swap, disk, net;
         let showCpu = true, showRam = true, showSwap = true;
